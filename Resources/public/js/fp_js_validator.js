@@ -336,6 +336,16 @@ var FpJsFormValidator = new function () {
     this.customizeMethods = new FpJsCustomizeMethods();
     this.constraintsCounter = 0;
 
+    /**
+     * Remove the whitespace from the beginning and end of a string.
+     *
+     * @param text
+     * @returns {string}
+     */
+    this.trim = function (text) {
+        return (text === null || text === undefined) ? "" : text.toString().replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, "");
+    };
+
     //noinspection JSUnusedGlobalSymbols
     this.addModel = function (model) {
         var self = this;
@@ -537,7 +547,7 @@ var FpJsFormValidator = new function () {
             value = element.transformers[i].reverseTransform(value, element);
         }
 
-        return value;
+        return this.trim(value);
     };
 
     this.getInputValue = function (element) {
