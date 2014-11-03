@@ -206,11 +206,7 @@ class MainFunctionalTest extends BaseMinkTestCase
             $sfErrors,
             'Sub request: a form was validated on the server side'
         );
-        $this->assertEquals(
-            'disabled_validation',
-            $this->find('#extra_msg')->getText(),
-            'Sub request: marker form the server side exists'
-        );
+        $this->assertTrue($this->wasPostRequest());
 
         $fpErrors = $this->getAllErrorsOnPage('sub_request/-/1');
         $this->assertEquals(
@@ -218,11 +214,7 @@ class MainFunctionalTest extends BaseMinkTestCase
             $fpErrors,
             'Sub request: a form was validated on the JS side'
         );
-        $this->assertEquals(
-            '',
-            $this->find('#extra_msg')->getText(),
-            'Sub request: marker form the server side does not exist'
-        );
+        $this->assertFalse($this->wasPostRequest());
     }
 
     /**
@@ -340,11 +332,119 @@ class MainFunctionalTest extends BaseMinkTestCase
     public function testEmptyChoice()
     {
         $sfErrors = $this->getAllErrorsOnPage('empty_choice/1/0', null, 'form_choice_submit');
+        $this->assertTrue($this->wasPostRequest());
         $fpErrors = $this->getAllErrorsOnPage('empty_choice/1/1', null, 'form_choice_submit');
+        $this->assertTrue($this->wasPostRequest());
         $this->assertErrorsEqual($sfErrors, $fpErrors, 'Choice fields are valid.');
 
         $sfErrors = $this->getAllErrorsOnPage('empty_choice/0/0', null, 'form_choice_submit');
+        $this->assertTrue($this->wasPostRequest());
         $fpErrors = $this->getAllErrorsOnPage('empty_choice/0/1', null, 'form_choice_submit');
+        $this->assertFalse($this->wasPostRequest());
         $this->assertErrorsEqual($sfErrors, $fpErrors, 'Choice fields have all the errors.');
+    }
+
+    public function testPasswordField()
+    {
+        $btnId = 'form_password_field_submit';
+        // Check the valid values
+        $sfErrors = $this->getAllErrorsOnPage('password_field/1/0', null, $btnId);
+        $fpErrors = $this->getAllErrorsOnPage('password_field/1/1', null, $btnId);
+        $this->assertErrorsEqual($sfErrors, $fpErrors, 'Choice fields are valid.');
+
+        $session = $this->session;
+        $changeAndGetErrors = function ($first, $second) use ($session) {
+            $page = $session->getPage();
+            $submit = $page->findButton('form_password_field_submit');
+
+            // Check the Length constraint
+            $page->findField('form_password_field_password_first')->setValue($first);
+            $page->findField('form_password_field_password_second')->setValue($second);
+            $submit->click();
+            $errors = array();
+            /** @var \Behat\Mink\Element\NodeElement $item */
+            foreach ($page->findAll('css', 'ul.form-errors li') as $item) {
+                $errors[] = $item->getText();
+            }
+
+            return $errors;
+        };
+
+        $sfErrors = array(
+            $this->getAllErrorsOnPage('password_field/0/0', null, $btnId), // blank fields
+            $changeAndGetErrors('a', 'a'), // too short
+            $changeAndGetErrors('lorem', 'qwerty'), // not equal
+        );
+
+        $fpErrors = array(
+            $this->getAllErrorsOnPage('password_field/0/1', null, $btnId), // blank fields
+            $changeAndGetErrors('a', 'a'), // too short
+            $changeAndGetErrors('lorem', 'qwerty'), // not equal
+        );
+
+        $this->assertEquals($sfErrors, $fpErrors, 'All the errors are correct');
+    }
+
+    public function testAsyncLoad()
+    {
+        $onLoad  = '1'; // initialize by onDocumentReady
+        $this->visitTest("async_load/0/{$onLoad}");
+
+        $page = $this->session->getPage();
+        $submit = $page->findButton('async_load_submit');
+        $initBtn = $page->findButton('init');
+
+        $submit->click();
+        $this->assertTrue($this->wasPostRequest(), 'Validation is disabled');
+
+        $this->visitTest("async_load/0/{$onLoad}");
+        $initBtn->click();
+        $submit->click();
+        $this->assertTrue($this->wasPostRequest(), 'Validation is still disabled');
+
+        $onLoad = '0'; // initialize directly by addModel
+        $this->visitTest("async_load/0/{$onLoad}");
+
+        $submit->click();
+        $this->assertTrue($this->wasPostRequest(), 'Validation is disabled');
+
+        $this->visitTest("async_load/0/{$onLoad}");
+        $initBtn->click();
+        $submit->click();
+        $this->assertFalse($this->wasPostRequest(), 'Validation is enabled');
+    }
+
+    public function testPassForm_as_object()
+    {
+        $form = '1'; // pass form as a FormView object
+        $this->visitTest("async_load/{$form}/1");
+
+        $page = $this->session->getPage();
+        $page->findButton('async_load_submit')->click();
+        $errors = $this->fetchErrors();
+        $this->assertEquals(array('async_load_message'), $errors, 'Correct errors');
+        $this->assertFalse($this->wasPostRequest(), 'Validation works fine');
+    }
+
+    public function testPassForm_as_string()
+    {
+        $form = 'async_load'; // pass form as a name string
+        $this->visitTest("async_load/{$form}/1");
+
+        $page = $this->session->getPage();
+        $page->findButton('async_load_submit')->click();
+        $errors = $this->fetchErrors();
+        $this->assertEquals(array('async_load_message'), $errors, 'Correct errors');
+        $this->assertFalse($this->wasPostRequest(), 'Validation works fine');
+    }
+
+    public function testPassForm_invalid()
+    {
+        $form = 'wrong_name'; // pass form as a name string
+        $this->visitTest("async_load/{$form}/1");
+        $page = $this->session->getPage();
+
+        $this->assertTrue($page->hasContent('Fp\JsFormValidatorBundle\Exception\UndefinedFormException'), 'Exception was thrown');
+        $this->assertTrue($page->hasContent("Form 'wrong_name' was not found. Existing forms: async_load"), 'Correct message');
     }
 }

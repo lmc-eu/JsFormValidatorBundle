@@ -29,7 +29,17 @@ function FpJsFormElement() {
         self.errors[sourceId] = FpJsFormValidator.validateElement(self);
 
         var errorPath = FpJsFormValidator.getErrorPathElement(self);
-        errorPath.showErrors.apply(errorPath.domNode, [self.errors[sourceId], sourceId]);
+        var domNode = errorPath.domNode;
+        if (!domNode) {
+            for (var childName in errorPath.children) {
+                var childDomNode = errorPath.children[childName].domNode;
+                if (childDomNode) {
+                    domNode = childDomNode;
+                    break;
+                }
+            }
+        }
+        errorPath.showErrors.apply(domNode, [self.errors[sourceId], sourceId]);
 
         return self.errors[sourceId].length == 0;
     };
@@ -217,7 +227,7 @@ function FpJsCustomizeMethods() {
                 ? 'validateRecursively'
                 : 'validate';
 
-            var validateUnique = (!opts || false !== opts['findUniqueContsraint']);
+            var validateUnique = (!opts || false !== opts['findUniqueConstraint']);
             if (validateUnique && item.jsFormValidator.parent) {
                 var data = item.jsFormValidator.parent.data;
                 if (data['entity'] && data['entity']['constraints']) {
@@ -251,10 +261,10 @@ function FpJsCustomizeMethods() {
         //noinspection JSCheckFunctionSignatures
         FpJsFormValidator.each(this, function (item) {
             var element = item.jsFormValidator;
-            element.validateRecursively();
             if (event) {
                 event.preventDefault();
             }
+            element.validateRecursively();
             if (FpJsFormValidator.ajax.queue) {
                 if (event) {
                     event.preventDefault();
@@ -337,12 +347,16 @@ var FpJsFormValidator = new function () {
     this.constraintsCounter = 0;
 
     //noinspection JSUnusedGlobalSymbols
-    this.addModel = function (model) {
+    this.addModel = function (model, onLoad) {
         var self = this;
         if (!model) return;
-        this.onDocumentReady(function () {
+        if (onLoad !== false) {
+            this.onDocumentReady(function () {
+                self.forms[model.id] = self.initModel(model);
+            });
+        } else {
             self.forms[model.id] = self.initModel(model);
-        });
+        }
     };
 
     this.onDocumentReady = function (callback) {
